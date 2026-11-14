@@ -18,6 +18,5 @@
     <Folder Include="Data\" />
     <Folder Include="Worker\" />
     <Folder Include="Services\" />
-    <Folder Include="Options\" />
   </ItemGroup>
 </Project>
