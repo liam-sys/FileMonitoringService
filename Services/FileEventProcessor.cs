@@ -1,6 +1,6 @@
-﻿// DAY 7: the queue, the processing loop, duplicate handling, and now REAL saving to the database.
+﻿// DAY 8: the queue, duplicate handling, saving with RETRIES, and a safe shutdown (DRAIN).
 //
-//   event handler --TryEnqueue--> [ Channel = the rail ] --ProcessAsync--> save to the database
+//   event handler --TryEnqueue--> [ Channel = the rail ] --ProcessAsync--> save (retry if it fails)
 using System.Threading.Channels;
 using FileMonitoringService.Data;
 using FileMonitoringService.Models;
@@ -12,7 +12,7 @@ namespace FileMonitoringService.Services;
 public sealed class FileEventProcessor : IFileEventProcessor
 {
     private readonly Channel<FileSystemEventRecord> _channel;
-    private readonly IFileEventRepository _repository;     // NEW: the thing that saves to the database
+    private readonly IFileEventRepository _repository;
     private readonly FileMonitoringOptions _options;
     private readonly ILogger<FileEventProcessor> _logger;
 
@@ -58,6 +58,33 @@ public sealed class FileEventProcessor : IFileEventProcessor
         }
     }
 
+    // NEW (Day 8): the safe shutdown. "Closing time at the restaurant".
+    public async Task DrainAsync(TimeSpan timeout)
+    {
+        // 1. Stop taking new orders. After this, TryEnqueue returns false.
+        _channel.Writer.TryComplete();
+
+        _logger.LogInformation("Saving the events still waiting in the queue (time limit: {Timeout})", timeout);
+
+        // 2. A stopwatch: after the time limit, this token says "stop now".
+        using var cts = new CancellationTokenSource(timeout);
+
+        try
+        {
+            // 3. The cook finishes every slip still on the rail.
+            await foreach (FileSystemEventRecord record in _channel.Reader.ReadAllAsync(cts.Token))
+            {
+                await HandleAsync(record, cts.Token);
+            }
+
+            _logger.LogInformation("The queue is empty. Nothing was left behind.");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("The shutdown time limit was reached. Events still in the queue were not saved.");
+        }
+    }
+
     private async Task HandleAsync(FileSystemEventRecord record, CancellationToken cancellationToken)
     {
         if (IsDuplicate(record))
@@ -66,23 +93,53 @@ public sealed class FileEventProcessor : IFileEventProcessor
             return;
         }
 
-        try
-        {
-            // NEW: the real save. The 0.3-second pretend delay is gone.
-            await _repository.SaveAsync(record, cancellationToken);
+        // NEW (Day 8): THE RECOVERY POLICY (FR-03).
+        // Try up to MaxSaveAttempts times, waiting longer after each failure (1s, 2s, 4s...).
+        // If every attempt fails, log the error with the event details and carry on
+        // with the next event. The service never crashes because of one failed save.
+        string? lastError = null;
 
-            _logger.LogInformation("Stored {EventType} event for {FullPath}", record.EventType, record.FullPath);
-        }
-        catch (OperationCanceledException)
+        for (int attempt = 1; attempt <= _options.MaxSaveAttempts; attempt++)
         {
-            throw;      // the service is stopping: let it through
-        }
-        catch (Exception ex)
-        {
-            // Chapter 12: try/catch. One failed save must NEVER crash the whole service (FR-03).
-            // For now we log it and move on. On Day 8 we add retries.
-            _logger.LogError(ex, "Could not store {EventType} event for {FullPath}. The event was NOT saved.",
-                record.EventType, record.FullPath);
+            try
+            {
+                // If an earlier attempt failed, note it on the row we are about to save.
+                if (lastError != null)
+                {
+                    record.ErrorMessage = Truncate("Saved after a retry. Previous error: " + lastError, 1000);
+                }
+
+                await _repository.SaveAsync(record, cancellationToken);
+
+                _logger.LogInformation("Stored {EventType} event for {FullPath}", record.EventType, record.FullPath);
+                return;                                       // success: we are done with this event
+            }
+            catch (OperationCanceledException)
+            {
+                throw;                                        // the service is stopping: let it through
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+
+                // Was that the last attempt? Then give up on this event.
+                if (attempt >= _options.MaxSaveAttempts)
+                {
+                    _logger.LogError(ex,
+                        "Could not store {EventType} event for {FullPath} after {Attempts} attempts. The event was NOT saved.",
+                        record.EventType, record.FullPath, attempt);
+                    return;
+                }
+
+                // Otherwise wait, then try again. The wait doubles each time: 1s, 2s, 4s...
+                TimeSpan delay = TimeSpan.FromMilliseconds(_options.RetryBaseDelayMs * Math.Pow(2, attempt - 1));
+
+                _logger.LogWarning(ex,
+                    "Database save failed (attempt {Attempt} of {MaxAttempts}). Retrying in {Delay}.",
+                    attempt, _options.MaxSaveAttempts, delay);
+
+                await Task.Delay(delay, cancellationToken);
+            }
         }
     }
 
@@ -109,5 +166,11 @@ public sealed class FileEventProcessor : IFileEventProcessor
         }
 
         return false;
+    }
+
+    // Cuts a long text down to a maximum length (the database column holds 1000 characters).
+    private static string Truncate(string text, int maxLength)
+    {
+        return text.Length <= maxLength ? text : text.Substring(0, maxLength);
     }
 }

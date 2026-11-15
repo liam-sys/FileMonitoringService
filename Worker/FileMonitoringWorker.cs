@@ -1,4 +1,5 @@
-﻿// DAY 5: starts the monitor, drops events on the queue, and runs the processing loop.
+﻿// DAY 8: starts the monitor, drops events on the queue, runs the processing loop,
+// and shuts down safely.
 using FileMonitoringService.Models;
 using FileMonitoringService.Monitoring;
 using FileMonitoringService.Services;
@@ -12,7 +13,6 @@ public sealed class FileMonitoringWorker : BackgroundService
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<FileMonitoringWorker> _logger;
 
-    // .NET supplies these four things automatically (dependency injection).
     public FileMonitoringWorker(
         IDirectoryMonitor monitor,
         IFileEventProcessor processor,
@@ -31,7 +31,6 @@ public sealed class FileMonitoringWorker : BackgroundService
 
         try
         {
-            // SUBSCRIBE to the doorbell, then start watching.
             _monitor.EventObserved += OnEventObserved;
             _monitor.Start();
         }
@@ -45,14 +44,16 @@ public sealed class FileMonitoringWorker : BackgroundService
 
         try
         {
-            // Run the cook's loop. It keeps going until the service is asked to stop.
+            // Run the processing loop until the service is asked to stop.
             await _processor.ProcessAsync(stoppingToken);
         }
         finally
         {
-            // Always runs when stopping (Chapter 12: finally).
-            _monitor.EventObserved -= OnEventObserved;    // unsubscribe
-            _monitor.Dispose();                           // switch off every watcher
+            // THE SAFE SHUTDOWN. This block always runs (Chapter 12: finally).
+            // The ORDER matters:
+            _monitor.EventObserved -= OnEventObserved;       // 1. stop listening for new events
+            _monitor.Dispose();                              // 2. switch off every watcher
+            await _processor.DrainAsync(TimeSpan.FromSeconds(5));   // 3. save what is still waiting (max 5 seconds)
             _logger.LogInformation("File monitoring service stopped at {TimeUtc}", DateTime.UtcNow);
         }
     }
@@ -60,11 +61,7 @@ public sealed class FileMonitoringWorker : BackgroundService
     // The EVENT HANDLER (the waiter): drop the slip on the rail and leave straight away.
     private void OnEventObserved(object? sender, FileSystemEventRecord record)
     {
-        if (_processor.TryEnqueue(record))
-        {
-            _logger.LogInformation("QUEUED {EventType}: {FullPath}", record.EventType, record.FullPath);
-        }
-        else
+        if (!_processor.TryEnqueue(record))
         {
             _logger.LogWarning("The event queue is full or closed. Dropped {EventType} event for {FullPath}",
                 record.EventType, record.FullPath);
