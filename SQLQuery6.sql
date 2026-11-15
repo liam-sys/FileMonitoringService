@@ -1,0 +1,1 @@
+﻿ALTER DATABASE FileMonitoringDb SET ONLINE;
