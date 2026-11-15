@@ -1,18 +1,21 @@
+using FileMonitoringService.Monitoring;
 using FileMonitoringService.Options;
+using FileMonitoringService.Worker;
 using Microsoft.Extensions.Options;
-using FileMonitoringService;
-using File_Monitor;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// DAY 2: read the FileMonitoring section of appsettings.json and check it when the service starts (FR-05)
+// DAY 2: read the FileMonitoring settings and check them when the service starts
 builder.Services.AddSingleton<IValidateOptions<FileMonitoringOptions>, FileMonitoringOptionsValidator>();
 builder.Services
     .AddOptions<FileMonitoringOptions>()
     .Bind(builder.Configuration.GetSection(FileMonitoringOptions.SectionName))
     .ValidateOnStart();
 
-builder.Services.AddHostedService<Worker>();
+// DAY 4: "when someone asks for IDirectoryMonitor, give them a DirectoryMonitor",
+// and run our worker in the background
+builder.Services.AddSingleton<IDirectoryMonitor, DirectoryMonitor>();
+builder.Services.AddHostedService<FileMonitoringWorker>();
 
 var host = builder.Build();
 host.Run();
