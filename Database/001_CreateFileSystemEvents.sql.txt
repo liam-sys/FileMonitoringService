@@ -1,0 +1,32 @@
+/* Database creation script (SQL Server / LocalDB). Safe to run more than once. */
+
+IF DB_ID(N'FileMonitoringDb') IS NULL
+BEGIN
+    CREATE DATABASE FileMonitoringDb;
+END
+GO
+
+USE FileMonitoringDb;
+GO
+
+IF OBJECT_ID(N'dbo.FileSystemEvents', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.FileSystemEvents
+    (
+        Id             bigint         IDENTITY(1,1) NOT NULL,
+        EventType      nvarchar(30)   NOT NULL,   -- Created, Changed, Deleted or Renamed
+        FileName       nvarchar(260)  NOT NULL,
+        FullPath       nvarchar(1024) NOT NULL,
+        OldFullPath    nvarchar(1024) NULL,       -- only used for Renamed
+        DirectoryPath  nvarchar(1024) NOT NULL,   -- the monitored folder
+        OccurredAtUtc  datetime2      NOT NULL,   -- when it happened (UTC)
+        ErrorMessage   nvarchar(1000) NULL,
+
+        CONSTRAINT PK_FileSystemEvents PRIMARY KEY (Id),
+        CONSTRAINT CK_FileSystemEvents_EventType
+            CHECK (EventType IN (N'Created', N'Changed', N'Deleted', N'Renamed'))
+    );
+
+    CREATE INDEX IX_FileSystemEvents_OccurredAtUtc ON dbo.FileSystemEvents (OccurredAtUtc);
+END
+GO

@@ -1,10 +1,8 @@
-﻿// DAY 6: the queue, the processing loop, and duplicate "Changed" handling.
+﻿// DAY 7: the queue, the processing loop, duplicate handling, and now REAL saving to the database.
 //
-//   event handler --TryEnqueue--> [ Channel = the rail ] --ProcessAsync--> handle each event
-//
-// NEW today: Windows often raises 2 or 3 Changed events for ONE save.
-// We keep the first and ignore the repeats that arrive within DuplicateWindowMs.
+//   event handler --TryEnqueue--> [ Channel = the rail ] --ProcessAsync--> save to the database
 using System.Threading.Channels;
+using FileMonitoringService.Data;
 using FileMonitoringService.Models;
 using FileMonitoringService.Options;
 using Microsoft.Extensions.Options;
@@ -14,19 +12,22 @@ namespace FileMonitoringService.Services;
 public sealed class FileEventProcessor : IFileEventProcessor
 {
     private readonly Channel<FileSystemEventRecord> _channel;
+    private readonly IFileEventRepository _repository;     // NEW: the thing that saves to the database
     private readonly FileMonitoringOptions _options;
     private readonly ILogger<FileEventProcessor> _logger;
 
-    // NEW: a Dictionary (like a Python dict). Key = file path, value = the time of the
-    // last Changed event we ACCEPTED for that file.
+    // Key = file path, value = the time of the last Changed event we ACCEPTED for that file.
     private readonly Dictionary<string, DateTime> _lastChangedUtc = new();
 
-    public FileEventProcessor(IOptions<FileMonitoringOptions> options, ILogger<FileEventProcessor> logger)
+    public FileEventProcessor(
+        IFileEventRepository repository,
+        IOptions<FileMonitoringOptions> options,
+        ILogger<FileEventProcessor> logger)
     {
+        _repository = repository;
         _options = options.Value;
         _logger = logger;
 
-        // A BOUNDED channel has a maximum size (ChannelCapacity from appsettings.json).
         _channel = Channel.CreateBounded<FileSystemEventRecord>(new BoundedChannelOptions(_options.ChannelCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -35,13 +36,11 @@ public sealed class FileEventProcessor : IFileEventProcessor
         });
     }
 
-    // Put the event on the rail. Returns false when the rail is full or closed.
     public bool TryEnqueue(FileSystemEventRecord record)
     {
         return _channel.Writer.TryWrite(record);
     }
 
-    // The cook: takes events off the rail one at a time until we are asked to stop.
     public async Task ProcessAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Event processing started");
@@ -61,23 +60,34 @@ public sealed class FileEventProcessor : IFileEventProcessor
 
     private async Task HandleAsync(FileSystemEventRecord record, CancellationToken cancellationToken)
     {
-        // NEW: check for a repeat BEFORE doing any work.
         if (IsDuplicate(record))
         {
             _logger.LogInformation("IGNORED duplicate {EventType}: {FullPath}", record.EventType, record.FullPath);
             return;
         }
 
-        // TEMPORARY (until Day 7): pretend the work is slow, like a database save will be.
-        await Task.Delay(300, cancellationToken);
+        try
+        {
+            // NEW: the real save. The 0.3-second pretend delay is gone.
+            await _repository.SaveAsync(record, cancellationToken);
 
-        _logger.LogInformation("PROCESSED {EventType}: {FullPath}", record.EventType, record.FullPath);
+            _logger.LogInformation("Stored {EventType} event for {FullPath}", record.EventType, record.FullPath);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;      // the service is stopping: let it through
+        }
+        catch (Exception ex)
+        {
+            // Chapter 12: try/catch. One failed save must NEVER crash the whole service (FR-03).
+            // For now we log it and move on. On Day 8 we add retries.
+            _logger.LogError(ex, "Could not store {EventType} event for {FullPath}. The event was NOT saved.",
+                record.EventType, record.FullPath);
+        }
     }
 
-    // NEW: is this a repeat of a Changed event we just accepted for the same file?
     private bool IsDuplicate(FileSystemEventRecord record)
     {
-        // Created, Deleted and Renamed are never repeats.
         if (record.EventType != FileEventType.Changed)
         {
             return false;
@@ -85,18 +95,14 @@ public sealed class FileEventProcessor : IFileEventProcessor
 
         var window = TimeSpan.FromMilliseconds(_options.DuplicateWindowMs);
 
-        // Ask the dictionary: "when did we last accept a Changed event for this file?"
-        // TryGetValue gives true and the time if the file is in the dictionary.
         if (_lastChangedUtc.TryGetValue(record.FullPath, out DateTime lastSeen)
             && record.OccurredAtUtc - lastSeen < window)
         {
-            return true;        // too soon after the last one: it is a repeat
+            return true;
         }
 
-        // Not a repeat: remember this time for next time.
         _lastChangedUtc[record.FullPath] = record.OccurredAtUtc;
 
-        // Keep memory small on a service that runs for days.
         if (_lastChangedUtc.Count > 5000)
         {
             _lastChangedUtc.Clear();

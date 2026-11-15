@@ -1,7 +1,9 @@
+using FileMonitoringService.Data;
 using FileMonitoringService.Monitoring;
 using FileMonitoringService.Options;
 using FileMonitoringService.Services;
 using FileMonitoringService.Worker;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -13,7 +15,20 @@ builder.Services
     .Bind(builder.Configuration.GetSection(FileMonitoringOptions.SectionName))
     .ValidateOnStart();
 
-// DAY 4 and 5: "when someone asks for the interface, give them the real class"
+// DAY 7: the database. Read the connection string from appsettings.json.
+string? connectionString = builder.Configuration.GetConnectionString("MonitoringDb");
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "ConnectionStrings:MonitoringDb is missing. Add it to appsettings.json.");
+}
+
+// A "factory" that creates a short-lived database connection each time we save an event.
+builder.Services.AddDbContextFactory<MonitoringDbContext>(dbOptions => dbOptions.UseSqlServer(connectionString));
+
+// "When someone asks for the interface, give them the real class."
+builder.Services.AddSingleton<IFileEventRepository, FileEventRepository>();
 builder.Services.AddSingleton<IDirectoryMonitor, DirectoryMonitor>();
 builder.Services.AddSingleton<IFileEventProcessor, FileEventProcessor>();
 builder.Services.AddHostedService<FileMonitoringWorker>();
