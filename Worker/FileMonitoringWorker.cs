@@ -1,25 +1,26 @@
-﻿// DAY 4: starts the monitor and listens for file events.
-// (This is a simple version. On Day 5 and 6 we add the queue and the database.)
+﻿// DAY 5: starts the monitor, drops events on the queue, and runs the processing loop.
 using FileMonitoringService.Models;
 using FileMonitoringService.Monitoring;
+using FileMonitoringService.Services;
 
 namespace FileMonitoringService.Worker;
 
-// BackgroundService gives us ExecuteAsync. .NET calls it when the service starts
-// and cancels stoppingToken when the service is asked to stop (Ctrl + C, or closing the window).
 public sealed class FileMonitoringWorker : BackgroundService
 {
     private readonly IDirectoryMonitor _monitor;
+    private readonly IFileEventProcessor _processor;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<FileMonitoringWorker> _logger;
 
-    // .NET supplies these three things automatically (dependency injection).
+    // .NET supplies these four things automatically (dependency injection).
     public FileMonitoringWorker(
         IDirectoryMonitor monitor,
+        IFileEventProcessor processor,
         IHostApplicationLifetime lifetime,
         ILogger<FileMonitoringWorker> logger)
     {
         _monitor = monitor;
+        _processor = processor;
         _lifetime = lifetime;
         _logger = logger;
     }
@@ -30,7 +31,7 @@ public sealed class FileMonitoringWorker : BackgroundService
 
         try
         {
-            // SUBSCRIBE to the doorbell: "ring OnEventObserved when a file event happens".
+            // SUBSCRIBE to the doorbell, then start watching.
             _monitor.EventObserved += OnEventObserved;
             _monitor.Start();
         }
@@ -44,12 +45,8 @@ public sealed class FileMonitoringWorker : BackgroundService
 
         try
         {
-            // Wait here until the service is asked to stop.
-            await Task.Delay(Timeout.Infinite, stoppingToken);
-        }
-        catch (OperationCanceledException)
-        {
-            // This is normal: it is how we find out that we were asked to stop.
+            // Run the cook's loop. It keeps going until the service is asked to stop.
+            await _processor.ProcessAsync(stoppingToken);
         }
         finally
         {
@@ -60,11 +57,17 @@ public sealed class FileMonitoringWorker : BackgroundService
         }
     }
 
-    // The EVENT HANDLER: the method that answers the doorbell.
-    // It runs every time the monitor raises EventObserved.
+    // The EVENT HANDLER (the waiter): drop the slip on the rail and leave straight away.
     private void OnEventObserved(object? sender, FileSystemEventRecord record)
     {
-        _logger.LogInformation("EVENT {EventType}: {FullPath} | old path: {OldFullPath} | {OccurredAtUtc:O}",
-            record.EventType, record.FullPath, record.OldFullPath ?? "-", record.OccurredAtUtc);
+        if (_processor.TryEnqueue(record))
+        {
+            _logger.LogInformation("QUEUED {EventType}: {FullPath}", record.EventType, record.FullPath);
+        }
+        else
+        {
+            _logger.LogWarning("The event queue is full or closed. Dropped {EventType} event for {FullPath}",
+                record.EventType, record.FullPath);
+        }
     }
 }

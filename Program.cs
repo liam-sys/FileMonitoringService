@@ -1,5 +1,6 @@
 using FileMonitoringService.Monitoring;
 using FileMonitoringService.Options;
+using FileMonitoringService.Services;
 using FileMonitoringService.Worker;
 using Microsoft.Extensions.Options;
 
@@ -12,9 +13,9 @@ builder.Services
     .Bind(builder.Configuration.GetSection(FileMonitoringOptions.SectionName))
     .ValidateOnStart();
 
-// DAY 4: "when someone asks for IDirectoryMonitor, give them a DirectoryMonitor",
-// and run our worker in the background
+// DAY 4 and 5: "when someone asks for the interface, give them the real class"
 builder.Services.AddSingleton<IDirectoryMonitor, DirectoryMonitor>();
+builder.Services.AddSingleton<IFileEventProcessor, FileEventProcessor>();
 builder.Services.AddHostedService<FileMonitoringWorker>();
 
 var host = builder.Build();
