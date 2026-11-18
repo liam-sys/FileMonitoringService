@@ -125,19 +125,18 @@ public sealed class FileEventProcessor : IFileEventProcessor
                 // Was that the last attempt? Then give up on this event.
                 if (attempt >= _options.MaxSaveAttempts)
                 {
-                    _logger.LogError(ex,
-                        "Could not store {EventType} event for {FullPath} after {Attempts} attempts. The event was NOT saved.",
-                        record.EventType, record.FullPath, attempt);
+                    _logger.LogError(
+                    "Could not store {EventType} event for {FullPath} after {Attempts} attempts. The event was NOT saved. Reason: {Reason}",
+                    record.EventType, record.FullPath, attempt, ex.GetBaseException().Message);
                     return;
                 }
 
                 // Otherwise wait, then try again. The wait doubles each time: 1s, 2s, 4s...
                 TimeSpan delay = TimeSpan.FromMilliseconds(_options.RetryBaseDelayMs * Math.Pow(2, attempt - 1));
 
-                _logger.LogWarning(ex,
-                    "Database save failed (attempt {Attempt} of {MaxAttempts}). Retrying in {Delay}.",
-                    attempt, _options.MaxSaveAttempts, delay);
-
+                _logger.LogWarning(
+                "Database save failed (attempt {Attempt} of {MaxAttempts}). Retrying in {Delay}. Reason: {Reason}",
+                attempt, _options.MaxSaveAttempts, delay, ex.GetBaseException().Message);
                 await Task.Delay(delay, cancellationToken);
             }
         }
