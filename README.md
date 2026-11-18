@@ -2,7 +2,7 @@
 
 A .NET 10 **Worker Service** that watches one or more folders, detects when files are **created, changed, renamed or deleted**, and stores each event in a SQL Server database so the activity history can be inspected later.
 
-> SIWES internship project. Author: Liadi Abdul-Malik | Supervisor: **[Supervisor Name]** | Submission date: 17/11/2026
+> SIWES internship project. Author: Liadi Abdul-Malik | Supervisor: Ose Osayeme | Submission date: 17/11/2026
 
 ---
 
