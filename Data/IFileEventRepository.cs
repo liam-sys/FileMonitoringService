@@ -1,5 +1,5 @@
-﻿// DAY 7: the contract for saving events.
-// The processor only knows this interface, so in the tests (Day 9) we can give it a fake
+﻿// The contract for saving events.
+// The processor only knows this interface, so in the tests we can give it a fake
 // repository instead of a real database.
 using FileMonitoringService.Models;
 

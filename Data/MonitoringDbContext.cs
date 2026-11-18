@@ -1,4 +1,4 @@
-﻿// DAY 7: Entity Framework Core mapping between our C# class and the SQL table (FR-03).
+﻿// Entity Framework Core mapping between our C# class and the SQL table (FR-03).
 using FileMonitoringService.Models;
 using Microsoft.EntityFrameworkCore;
 

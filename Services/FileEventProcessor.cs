@@ -1,4 +1,4 @@
-﻿// DAY 8: the queue, duplicate handling, saving with RETRIES, and a safe shutdown (DRAIN).
+﻿// The queue, duplicate handling, saving with RETRIES, and a safe shutdown (DRAIN).
 //
 //   event handler --TryEnqueue--> [ Channel = the rail ] --ProcessAsync--> save (retry if it fails)
 using System.Threading.Channels;
@@ -58,7 +58,7 @@ public sealed class FileEventProcessor : IFileEventProcessor
         }
     }
 
-    // NEW (Day 8): the safe shutdown. "Closing time at the restaurant".
+    // The safe shutdown.
     public async Task DrainAsync(TimeSpan timeout)
     {
         // 1. Stop taking new orders. After this, TryEnqueue returns false.
@@ -71,7 +71,7 @@ public sealed class FileEventProcessor : IFileEventProcessor
 
         try
         {
-            // 3. The cook finishes every slip still on the rail.
+            // 3. It finishes every slip still on the rail.
             await foreach (FileSystemEventRecord record in _channel.Reader.ReadAllAsync(cts.Token))
             {
                 await HandleAsync(record, cts.Token);
@@ -93,7 +93,7 @@ public sealed class FileEventProcessor : IFileEventProcessor
             return;
         }
 
-        // NEW (Day 8): THE RECOVERY POLICY (FR-03).
+        // THE RECOVERY POLICY (FR-03).
         // Try up to MaxSaveAttempts times, waiting longer after each failure (1s, 2s, 4s...).
         // If every attempt fails, log the error with the event details and carry on
         // with the next event. The service never crashes because of one failed save.

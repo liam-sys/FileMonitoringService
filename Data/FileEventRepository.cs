@@ -1,4 +1,4 @@
-﻿// DAY 7: saves one event to the database.
+﻿// Saves one event to the database.
 using FileMonitoringService.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,7 +17,7 @@ public sealed class FileEventRepository : IFileEventRepository
 
     public async Task SaveAsync(FileSystemEventRecord record, CancellationToken cancellationToken)
     {
-        // "await using" cleans up the context when the method ends (like "using" in Chapter 12).
+        // "await using" cleans up the context when the method ends 
         await using MonitoringDbContext db = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         db.FileSystemEvents.Add(record);                    // add one row

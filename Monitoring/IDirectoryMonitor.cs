@@ -1,4 +1,4 @@
-﻿// DAY 3, step 2: the "contract" for a directory monitor.
+﻿// The "contract" for a directory monitor.
 // An interface lists WHAT a class can do, not HOW it does it.
 // Other classes will depend on this list, not on the real monitor,
 // so tests can swap in a fake monitor later.

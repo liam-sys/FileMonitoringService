@@ -1,4 +1,4 @@
-﻿// DAY 3, step 3: the monitor that owns the FileSystemWatcher objects (requirements FR-01 and FR-02).
+﻿// The monitor that owns the FileSystemWatcher objects (requirements FR-01 and FR-02).
 // It watches the folders and turns each file event into a FileSystemEventRecord,
 // then rings the EventObserved doorbell.
 using FileMonitoringService.Models;
@@ -14,7 +14,7 @@ public sealed class DirectoryMonitor : IDirectoryMonitor
     private readonly List<FileSystemWatcher> _watchers = new();
     private bool _disposed;
 
-    // The constructor (Chapter 14). .NET hands us the settings and a logger automatically.
+    // The constructor .NET hands us the settings and a logger automatically.
     // This is called "dependency injection": we never write "new" for them ourselves.
     public DirectoryMonitor(IOptions<FileMonitoringOptions> options, ILogger<DirectoryMonitor> logger)
     {
@@ -45,7 +45,7 @@ public sealed class DirectoryMonitor : IDirectoryMonitor
             }
             catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
             {
-                // Chapter 12: try/catch. One bad folder must not stop the others.
+                // try/catch. One bad folder must not stop the others.
                 _logger.LogError(ex, "Could not start watching {Directory}. It will be skipped.", directory);
             }
         }
@@ -69,7 +69,6 @@ public sealed class DirectoryMonitor : IDirectoryMonitor
         };
 
         // The four callbacks. Each one runs when the watcher sees that kind of event.
-        // The "=>" is a lambda: a short method without a name.
         // They must be FAST, so they only create a record and ring our doorbell.
         watcher.Created += (sender, e) => Raise(FileEventType.Created, e.FullPath, null, directory);
         watcher.Deleted += (sender, e) => Raise(FileEventType.Deleted, e.FullPath, null, directory);

@@ -8,14 +8,14 @@ using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// DAY 2: read the FileMonitoring settings and check them when the service starts
+// Read the FileMonitoring settings and check them when the service starts
 builder.Services.AddSingleton<IValidateOptions<FileMonitoringOptions>, FileMonitoringOptionsValidator>();
 builder.Services
     .AddOptions<FileMonitoringOptions>()
     .Bind(builder.Configuration.GetSection(FileMonitoringOptions.SectionName))
     .ValidateOnStart();
 
-// DAY 7: the database. Read the connection string from appsettings.json.
+// The database. Read the connection string from appsettings.json.
 string? connectionString = builder.Configuration.GetConnectionString("MonitoringDb");
 
 if (string.IsNullOrWhiteSpace(connectionString))

@@ -1,4 +1,4 @@
-﻿// DAY 2, step 3: checks the settings when the service starts (requirement FR-05).
+﻿// Checks the settings when the service starts (requirement FR-05).
 // If something is wrong, the service refuses to start and lists ALL the problems at once.
 using Microsoft.Extensions.Options;
 
@@ -17,7 +17,7 @@ public sealed class FileMonitoringOptionsValidator : IValidateOptions<FileMonito
             failures.Add("FileMonitoring:Directories must contain at least one directory path.");
         }
 
-        // Check each folder path (Chapter 6: a for loop).
+        // Check each folder path.
         for (int i = 0; i < options.Directories.Count; i++)
         {
             string directory = options.Directories[i];
@@ -64,7 +64,7 @@ public sealed class FileMonitoringOptionsValidator : IValidateOptions<FileMonito
         }
 
         // We do NOT check here that the folders exist on the disk.
-        // The monitoring code (Day 3) does that, so one missing folder can be skipped
+        // The monitoring code does that, so one missing folder can be skipped
         // while the other folders keep being watched.
 
         if (failures.Count > 0)

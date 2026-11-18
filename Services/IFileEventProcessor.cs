@@ -1,4 +1,4 @@
-﻿// DAY 8: the contract for the event processor (now with a safe shutdown step).
+﻿// The contract for the event processor (now with a safe shutdown step).
 using FileMonitoringService.Models;
 
 namespace FileMonitoringService.Services;
@@ -13,7 +13,7 @@ public interface IFileEventProcessor
     // one by one and handles them.
     Task ProcessAsync(CancellationToken cancellationToken);
 
-    // NEW (Day 8): called when the service is stopping.
+    // called when the service is stopping.
     // It stops accepting new events and saves the events still waiting, for at most the given time.
     Task DrainAsync(TimeSpan timeout);
 }

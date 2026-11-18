@@ -1,4 +1,4 @@
-﻿// DAY 8: starts the monitor, drops events on the queue, runs the processing loop,
+﻿// Starts the monitor, drops events on the queue, runs the processing loop,
 // and shuts down safely.
 using FileMonitoringService.Models;
 using FileMonitoringService.Monitoring;
@@ -49,7 +49,7 @@ public sealed class FileMonitoringWorker : BackgroundService
         }
         finally
         {
-            // THE SAFE SHUTDOWN. This block always runs (Chapter 12: finally).
+            // THE SAFE SHUTDOWN. This block always runs.
             // The ORDER matters:
             _monitor.EventObserved -= OnEventObserved;       // 1. stop listening for new events
             _monitor.Dispose();                              // 2. switch off every watcher
